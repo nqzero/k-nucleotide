@@ -179,4 +179,16 @@ public class knucleotide {
         System.out.print(sb);
     }
 }
-    
+
+/*
+
+	 cp=$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/fd/1)
+	 alias java="$java11/bin/java -Xms2G -Xmx2G"
+	 java -cp target/classes:$cp fasta 1000 > input.txt
+	 java -cp target/classes:$cp knucleotide < input.txt | diff - output.txt 
+	 java -cp target/classes:$cp fasta 25000000 > t1
+	 time java -cp target/classes:$cp knucleotide < t1
+	 { for ii in {1..12}; do time java -cp target/classes:$cp knucleotide < t1 > /dev/null; sleep 10; done; } 2> x2
+
+*/
+
