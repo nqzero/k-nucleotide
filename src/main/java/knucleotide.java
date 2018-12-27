@@ -130,6 +130,12 @@ public class knucleotide {
         return result;
     }
 
+    static int size = 1<<20;
+    static byte [][] data = new byte[1<<20][];
+    static int ndata = 0;
+    static byte [] alloc() { return data[ndata++] = new byte[size]; }
+    static { alloc(); }
+    
     static byte[] read(InputStream is) throws IOException {
         String line;
         BufferedReader in = new BufferedReader(new InputStreamReader(is,
@@ -139,19 +145,25 @@ public class knucleotide {
                 break;
         }
     
-        byte[] bytes = new byte[1048576];
+        byte[] bytes = data[0];
         int position = 0;
         while ((line = in.readLine()) != null && line.charAt(0) != '>') {
-            if (line.length() + position > bytes.length) {
-                byte[] newBytes = new byte[bytes.length * 2];
-                System.arraycopy(bytes, 0, newBytes, 0, position);
-                bytes = newBytes;
+            int num = line.length();
+            for (int i = 0; i < num; i++) {
+                if (position==size) {
+                    position = 0;
+                    bytes = alloc();
+                }
+                byte val = (byte) line.charAt(i);
+                byte result = codes[val & 0x7];
+                bytes[position++] = result;
             }
-            for (int i = 0; i < line.length(); i++)
-                bytes[position++] = (byte) line.charAt(i);
         }
+        byte [] done = new byte[ndata*size-size+position];
+        for (int ii=0; ii < ndata; ii++)
+            System.arraycopy(data[ii], 0, done, ii*size, ii==ndata-1 ? position:size);
     
-        return toCodes(bytes, position);
+        return done;
     }
 
     public static void main(String[] args) throws Exception {
