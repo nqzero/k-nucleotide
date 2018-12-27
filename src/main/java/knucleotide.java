@@ -113,7 +113,7 @@ public class knucleotide {
     static long getKey(byte[] arr, int offset, int length) {
         long key = 0;
         for (int i = offset; i < offset + length; i++) {
-            key = key * 4 + arr[i];
+            key = (key<<2) + arr[i];
         }
         return key;
     }
