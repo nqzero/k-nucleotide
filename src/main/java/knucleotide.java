@@ -6,11 +6,8 @@
  */
 
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
-
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
@@ -18,7 +15,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -123,30 +119,41 @@ public class knucleotide {
         int ndata = 0;
         byte [] alloc() { return data[ndata++] = new byte[size]; }
         { alloc(); }
+        
+        
 
+        
         byte[] read(InputStream is) throws IOException {
-            String line;
-            BufferedReader in = new BufferedReader(new InputStreamReader(is,
-                    StandardCharsets.ISO_8859_1));
-            while ((line = in.readLine()) != null) {
-                if (line.startsWith(">THREE"))
-                    break;
-            }
-
             byte[] bytes = data[0];
             int position = 0;
-            while ((line = in.readLine()) != null && line.charAt(0) != '>') {
-                int num = line.length();
-                for (int i = 0; i < num; i++) {
+
+            int ki = 0;
+            int kc = 0;
+            int kn = 0;
+            byte [] raw = new byte[1<<20];
+            loop:
+            while ((kn = is.read(raw)) > 0)
+                for (ki=0; ki < kn;)
+                    if (raw[ki++]=='>' && ++kc==3) break loop;
+            loop:
+            while (ki < kn || (kn = is.read(raw))+(ki=0) > 0) {
+                while (ki < kn)
+                    if (raw[ki++]=='\n') break loop;
+            }
+            loop:
+            while (ki < kn || (kn = is.read(raw))+(ki=0) > 0)
+                for (; ki < kn; ki++) {
+                    byte val = raw[ki];
+                    if (val=='>') break loop;
+                    if (val=='\n') continue;
                     if (position==size) {
                         position = 0;
                         bytes = alloc();
                     }
-                    byte val = (byte) line.charAt(i);
                     byte result = codes[val & 0x7];
                     bytes[position++] = result;
                 }
-            }
+
             byte [] done = new byte[ndata*size-size+position];
             for (int ii=0; ii < ndata; ii++)
                 System.arraycopy(data[ii], 0, done, ii*size, ii==ndata-1 ? position:size);
