@@ -1,9 +1,27 @@
-/* The Computer Language Benchmarks Game
+/*
+
+ modified by nqzero, offered under the BSD license
+ copyright 2019 nqzero, the full notice of which includes this block of text and may not be removed
+ the "benchmark" game is terrible for a number of reasons, including:
+ - the test harness is difficult to configure and use, making the barrier to optimization abnormally high
+ - the tests are not representative of common programming tasks
+ - there's no attempt to account for JIT warmup, and many of the tasks are too short to ever warm up
+ - the maintainers are opinionated in terms of what code they'll allow, effectively choosing the winners
+ - doesn't appear to allow for jvm options to be included
+ - the test cpu is from 2007 and is not necessarily representative of current cpus
+ this is not a meaningful benchmark in any way and the use of the term should be removed from the game
+ https://github.com/nqzero/k-nucleotide
+
+ this software is derived from the benchmark game licensed under the included bsd.txt,
+ the original notice of which follows
+
+ The Computer Language Benchmarks Game
  https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
  
  contributed by James McIlree
  modified by Tagir Valeev
- */
+
+*/
 
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import java.io.IOException;
@@ -20,6 +38,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+/**
+ * read a fasta file from standard input and calculate statistics
+ * note: this code is intended to be run on java 11 with `-Xms2G -Xmx2G`
+ */
 public class knucleotide {
     static final byte[] codes = { -1, 0, -1, 1, 3, -1, -1, 2 };
     static final char[] nucleotides = { 'A', 'C', 'G', 'T' };
