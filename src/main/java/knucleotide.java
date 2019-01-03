@@ -59,12 +59,12 @@ public class knucleotide {
             List<java.util.Map.Entry<String, Integer>> freq = new ArrayList<>(size());
             forEach((key, cnt) -> freq.add(new SimpleEntry<>(keyToString(key,frag),cnt)));
             freq.sort(Map.Entry.comparingByValue(Comparator.reverseOrder()));
-            StringBuilder sb = new StringBuilder();
+            String result = "";
             for (java.util.Map.Entry<String, Integer> entry : freq) {
-                sb.append(String.format(Locale.ENGLISH, "%s %.3f\n", entry.getKey(),
-                        entry.getValue() * 100.0f / totalCount));
+                result += String.format(Locale.ENGLISH, "%s %.3f\n", entry.getKey(),
+                        entry.getValue() * 100.0f / totalCount);
             }
-            return sb.append('\n').toString();
+            return result+'\n';
         }
         int get(int frag,long k) {
             return this.frag==frag ? get(k):0;
@@ -260,16 +260,16 @@ public class knucleotide {
         List<Future<Result>> futures = pool.invokeAll(knuc.createFragmentTasks(fragmentLengths));
         pool.shutdown();
 
-        StringBuilder sb = new StringBuilder();
+        String result = "";
 
-        sb.append(futures.get(0).get().writeFrequencies(knuc.total));
-        sb.append(futures.get(1).get().reduce(futures.get(2).get()).writeFrequencies(knuc.total - 1));
+        result += futures.get(0).get().writeFrequencies(knuc.total);
+        result += futures.get(1).get().reduce(futures.get(2).get()).writeFrequencies(knuc.total - 1);
 
         String[] frags = { "GGT", "GGTA", "GGTATT", "GGTATTTTAATT", "GGTATTTTAATTTATAGT" };
         for (String frag : frags)
-            sb.append(writeCount(futures, frag));
+            result += writeCount(futures, frag);
 
-        System.out.print(sb);
+        System.out.print(result);
     }
 }
 
