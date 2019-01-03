@@ -23,10 +23,15 @@ import java.util.concurrent.Future;
 public class knucleotide {
     static final byte[] codes = { -1, 0, -1, 1, 3, -1, -1, 2 };
     static final char[] nucleotides = { 'A', 'C', 'G', 'T' };
+    static int nproc = Runtime.getRuntime().availableProcessors();
+    byte [] seq;
+    int total;
 
     static class Result extends Long2IntOpenHashMap {
         int frag;
-    
+
+        Result() { super(1<<10); }
+        
         Result reduce(Result map2) {
             map2.forEach((key, value) -> addTo(key, value));
             return this;
@@ -42,9 +47,10 @@ public class knucleotide {
             }
             return key;
         }
-        Result create(byte[] seq, int offset, int frag) {
+        Result create(knucleotide knuc, int offset, int frag) {
+            byte [] seq = knuc.seq;
             this.frag = frag;
-            int lastIndex = seq.length - frag + 1;
+            int lastIndex = knuc.total - frag + 1;
             for (int index = offset; index < lastIndex; index += frag)
                 addTo(getKey(seq, index, frag), 1);
             return this;
@@ -65,12 +71,12 @@ public class knucleotide {
         }
     }
 
-    static ArrayList<Callable<Result>> createFragmentTasks(final byte[] seq,int[] frags) {
+    ArrayList<Callable<Result>> createFragmentTasks(int[] frags) {
         ArrayList<Callable<Result>> tasks = new ArrayList<>();
         for (int frag : frags)
             for (int index = 0; index < frag; index++) {
                 int offset = index;
-                tasks.add(() -> new Result().create(seq, offset, frag));
+                tasks.add(() -> new Result().create(this, offset, frag));
             }
         return tasks;
     }
@@ -111,71 +117,153 @@ public class knucleotide {
         return result;
     }
 
+    
+    static final int grt = '>';
+    static final int nln = '\n';
+
 
     static class Reader {
     
-        int size = 1<<20;
-        byte [][] data = new byte[1<<20][];
-        int ndata = 0;
-        byte [] alloc() { return data[ndata++] = new byte[size]; }
-        { alloc(); }
+        /** 
+         * size of the read buffer, ideally should match OS standard io buffer sizes
+         * could use power-of-two growth to adjust dynamically
+         * this value appears to be a good compromise
+         */
+        int blockSize = 1<<20;
+        /** current index into the knuc data buffer */
+        int ki = 0;
+        /** number of elements in the knuc data buffer */
+        int kn = 0;
+        byte [] raw;
+        volatile Wrapper [] wrapped = new Wrapper[1<<16];
+        Decoder task = new Decoder();
+        Collator task2 = new Collator();
+        int kwrap = 0;
+        volatile byte [] finish;
+        volatile int fsize;
+        {
+            task.start();
+            if (nproc > 3) task2.start();
+        }
         
-        
+        static void noop() {
+            try {
+                Thread.sleep(0);
+            }
+            catch (InterruptedException ex) {}
+        }
 
-        
-        byte[] read(InputStream is) throws IOException {
-            byte[] bytes = data[0];
-            int position = 0;
+        class Decoder extends Thread {
+            public void run() {
+                int kraw = 0;
+                for (Wrapper raw; true; kraw++) {
+                    while ((raw = wrapped[kraw])==null) noop();
+                    if (raw.data==null)
+                        break;
+                    raw.make();
+                }
+                if (nproc <= 3) task2.run();
+            }
+        }
+        class Collator extends Thread {
+            public void run() {
+                int kraw = 0;
+                int total = 0;
+                byte [] data = new byte[blockSize];
+                int num;
+                for (Wrapper raw; true; kraw++) {
+                    while ((raw = wrapped[kraw])==null || (num = raw.position) < 0) noop();
+                    if (raw.data==null)
+                        break;
+                    if (num+total > data.length) {
+                        byte [] next = new byte[data.length*2];
+                        System.arraycopy(data,0,next,0,total);
+                        data = next;
+                    }
+                    System.arraycopy(raw.data,0,data,total,num);
+                    total += num;
+                }
+                fsize = total;
+                finish = data;
+            }
+        }
+        static class Wrapper {
+            byte [] data;
+            int start;
+            int size;
+            volatile int position;
+            void build(Reader xx) {
+                data = xx.raw;
+                start = xx.ki;
+                size = xx.kn;
+                position = -1;
+            }
+            int make() {
+                int kdata = 0;
+                for (int ii=start; ii < size; ii++) {
+                    byte val = data[ii];
+                    if (val==grt) break;
+                    if (val==nln) continue;
+                    data[kdata++] = codes[val & 0x7];
+                }
+                return position = kdata;
+            }
+        }
 
-            int ki = 0;
+        void place() {
+            Wrapper payload = new Wrapper();
+            payload.build(this);
+            wrapped[kwrap++] = payload;
+            ki = kn;
+        }
+
+        boolean read() throws IOException {
+            ki = 0;
+            raw = new byte[blockSize];
+            kn = System.in.read(raw);
+            return kn >= 0;
+        }
+        
+        void read(knucleotide knuc,InputStream is) throws IOException {
             int kc = 0;
-            int kn = 0;
-            byte [] raw = new byte[1<<20];
             loop:
-            while ((kn = is.read(raw)) > 0)
-                for (ki=0; ki < kn;)
-                    if (raw[ki++]=='>' && ++kc==3) break loop;
-            loop:
-            while (ki < kn || (kn = is.read(raw))+(ki=0) > 0) {
+            while (ki < kn || read())
                 while (ki < kn)
-                    if (raw[ki++]=='\n') break loop;
+                    if (raw[ki++]==grt && ++kc==3) break loop;
+            loop:
+            while (ki < kn || read()) {
+                while (ki < kn)
+                    if (raw[ki++]==nln) break loop;
             }
             loop:
-            while (ki < kn || (kn = is.read(raw))+(ki=0) > 0)
-                for (; ki < kn; ki++) {
-                    byte val = raw[ki];
-                    if (val=='>') break loop;
-                    if (val=='\n') continue;
-                    if (position==size) {
-                        position = 0;
-                        bytes = alloc();
-                    }
-                    byte result = codes[val & 0x7];
-                    bytes[position++] = result;
-                }
+            while (ki < kn || read())
+                place();
+            wrapped[kwrap] = new Wrapper();
 
-            byte [] done = new byte[ndata*size-size+position];
-            for (int ii=0; ii < ndata; ii++)
-                System.arraycopy(data[ii], 0, done, ii*size, ii==ndata-1 ? position:size);
 
-            return done;
+            while (finish==null)
+                if (nproc <= 3) noop();
+            
+            knuc.seq = finish;
+            knuc.total = fsize;
         }
     }
 
     public static void main(String[] args) throws Exception {
-        byte[] sequence = new Reader().read(System.in);
+        Reader reader = new Reader();
+        knucleotide knuc = new knucleotide();
+        reader.read(knuc,System.in);
+        
 
-        ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime()
-                .availableProcessors());
+        ExecutorService pool = Executors.newFixedThreadPool(nproc);
         int[] fragmentLengths = { 1, 2, 3, 4, 6, 12, 18 };
-        List<Future<Result>> futures = pool.invokeAll(createFragmentTasks(sequence,
-                fragmentLengths));
+        List<Future<Result>> futures = pool.invokeAll(knuc.createFragmentTasks(fragmentLengths));
         pool.shutdown();
 
         StringBuilder sb = new StringBuilder();
 
-        sb.append(futures.get(0).get().writeFrequencies(sequence.length));
-        sb.append(futures.get(1).get().reduce(futures.get(2).get()).writeFrequencies(sequence.length - 1));
+        sb.append(futures.get(0).get().writeFrequencies(knuc.total));
+        sb.append(futures.get(1).get().reduce(futures.get(2).get()).writeFrequencies(knuc.total - 1));
 
         String[] frags = { "GGT", "GGTA", "GGTATT", "GGTATTTTAATT", "GGTATTTTAATTTATAGT" };
         for (String frag : frags)
